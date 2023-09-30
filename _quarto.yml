@@ -1,5 +1,6 @@
 project:
-  title: "phonetics_guest"
+  title: "phonetics_guest_2023"
+  output-dir: "docs"
 
 editor: visual
 
