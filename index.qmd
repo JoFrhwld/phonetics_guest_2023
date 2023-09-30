@@ -1,0 +1,8 @@
+---
+title: "What even is a vowel?"
+format: revaljs
+---
+
+## 
+
+![from [Wikimedia](https://commons.wikimedia.org/wiki/File:Orange_tabby_cat_sitting_on_fallen_leaves-Hisashi-01.jpg), by Flikr user [Hisashi](https://www.flickr.com/people/60223652@N00)](assets/540px-Orange_tabby_cat_sitting_on_fallen_leaves-Hisashi-01A.jpg){fig-align="center"}
