@@ -1,8 +1,1452 @@
 ---
 title: "What even is a vowel?"
-format: revaljs
+format: 
+  revealjs:
+    fig-align: center
+    transition: slide
+    resources: 
+      - "assets/cat.wav"
+      - "assets/kite.wav"
+    css: custom.css
+revealjs-plugins:
+  - animate
+filters: 
+  - animate      
+knitr: 
+  opts_chunk: 
+    echo: false
+    message: false
+    warning: false
+bibliography: references.bib
 ---
+
+```{r}
+source(here::here("_defaults.R"))
+```
+
+```{r}
+library(tidyverse)
+library(forcats)
+library(gt)
+library(geomtextpath)
+library(ggforce)
+library(ggdensity)
+library(ggblend)
+library(densityarea)
+library(patchwork)
+library(brms)
+library(marginaleffects)
+library(tidybayes)
+library(ggdist)
+library(sf)
+library(svgparser)
+```
 
 ## 
 
-![from [Wikimedia](https://commons.wikimedia.org/wiki/File:Orange_tabby_cat_sitting_on_fallen_leaves-Hisashi-01.jpg), by Flikr user [Hisashi](https://www.flickr.com/people/60223652@N00)](assets/540px-Orange_tabby_cat_sitting_on_fallen_leaves-Hisashi-01A.jpg){fig-align="center"}
+::: {style="text-align:center;font-size:5vw;"}
+\[kʰ \_ t̚\]
+:::
+
+![from [Wikimedia](https://commons.wikimedia.org/wiki/File:Orange_tabby_cat_sitting_on_fallen_leaves-Hisashi-01.jpg), by Flikr user [Hisashi](https://www.flickr.com/people/60223652@N00)](assets/540px-Orange_tabby_cat_sitting_on_fallen_leaves-Hisashi-01A.jpg){style="text-align:center;" fig-alt="A photograph of an orange and white cat." fig-align="center" width="64%"}
+
+## Formants ➡️ Vowel Space
+
+![](assets/cat_formant.png){fig-align="center"}
+
+```{r}
+html_tag_audio("assets/cat.wav", type = "wav")
+```
+
+## Formants ➡️ Vowel Space
+
+?
+
+![](assets/kite_formant.png){fig-align="center"}
+
+```{r}
+html_tag_audio("assets/kite.wav")
+```
+
+## Formants ➡️ Vowel Spaces
+
+```{r}
+cat_typical <- read_csv(here::here("data", "catford_typical.csv"))
+```
+
+```{r}
+cat_typical |>  
+  select(-diff) |> 
+  mutate(idx = row_number()) |> 
+  filter(idx <= 8) -> front_v
+
+cat_typical |>  
+  select(-diff) |> 
+  mutate(idx = row_number()) |> 
+  filter(idx > 8) |> 
+  arrange(desc(idx))-> back_v
+```
+
+```{r}
+bind_cols(front_v, back_v) |> 
+  select(-starts_with("idx")) |> 
+  gt() |> 
+    tab_spanner(
+      columns = 1:3,
+      label = "front vowels"
+    ) |> 
+    tab_spanner(
+      columns = 4:6,
+      label = "back vowels"
+    ) |> 
+    cols_label(
+      starts_with("vowel") ~ "vowel",
+      starts_with("F1") ~ "F1",
+      starts_with("F2") ~ "F2"
+    ) |> 
+    tab_header("Typical Formants") |> 
+    tab_source_note("Values from Catford (1988) via Wikipedia")
+```
+
+## Formants ➡️ Vowel Spaces
+
+```{r}
+anae <- read_rds(here::here("data", "anaeUNNORM.rds"))
+```
+
+```{r}
+phl <- read_csv(here::here("data", "phl_speaker.csv"))
+```
+
+```{r}
+#| crop: true
+#| fig-width: 6
+#| fig-height: 6
+#| fig-align: center
+cat_typical |> 
+  mutate(vowel = fct_reorder(vowel, F1)) |> 
+  mutate(
+    rounded = vowel |> 
+      case_match(
+        c("y", "ø", "œ", "ɶ", "ɒ", "ɔ", "o", "u") ~ "rounded",
+        .default = "unrounded"
+      ) |> 
+      fct_relevel("unrounded"),
+    front = vowel |> 
+      case_match(
+        c("i", "y", "e", "ø", "ɛ", "œ", "a", "ɶ") ~ "front",
+        .default = "back"
+      ) |> 
+      fct_relevel("front")
+  ) |> 
+  pivot_longer(
+    F1:F2,
+    names_to = "formant",
+    values_to = "frequency"
+  ) |> 
+  ggplot(aes(vowel, frequency))+
+    geom_point(aes(color = formant), size = 3) +
+    facet_wrap(~rounded+front, scales = "free_x")+
+    theme(
+      aspect.ratio = 1
+    )+
+    labs(
+      caption = "Values from Catford (1988) via Wikipedia",
+      y = "frequency (Hz)"
+    )+
+    khroma::scale_color_bright(limits = c("F2", "F1"))
+```
+
+## Formants ➡️ Vowel Spaces
+
+```{r}
+dim_pal <- khroma::color("bright")(2)
+```
+
+```{r}
+#| crop: true
+#| fig-align: center
+cat_typical |> 
+  ggplot(aes(F2, F1))+
+    geom_mark_hull(concavity = 4, color = "grey80")+
+    geom_text(aes(label = vowel),
+              size = 6)+
+    geom_textabline(label = "F1 = F2",
+                    color = "grey60")+
+    scale_x_continuous(trans = rev_log, expand = expansion(mult = 0.1))+
+    scale_y_continuous(trans = rev_log, expand = expansion(mult = 0.1))+
+    labs(x = expression(NULL %<-% F2),
+         y = expression(NULL %<-% F1))+
+    coord_fixed()+
+    labs(
+      title = "Vowel Space",
+      caption = "Values from Catford (1988) via Wikipedia"
+    )+
+    theme(
+      axis.text.x = element_text(color = dim_pal["blue"]),
+      axis.title.x = element_text(color = dim_pal["blue"]),
+      axis.text.y = element_text(color = dim_pal["red"]),
+      axis.title.y = element_text(color = dim_pal["red"])
+    )
+```
+
+## Many Measurements? {auto-animate="true"}
+
+```{r}
+phl_speaker <- read_csv(here::here("data", "phl_speaker.csv"))
+```
+
+```{r}
+phl_speaker |> 
+  summarise(
+    .by = c(plt_vclass, ipa_class),
+    across(F1:F2,
+           .fns = \(x) exp(mean(log(x))))
+  ) ->
+  phl_means
+```
+
+```{r}
+iy_ae_mean <- phl_means |> 
+  filter(plt_vclass %in% c("iy", "ae")) |> 
+  mutate(plot_vowel = case_match(
+    plt_vclass,
+    "iy" ~ "i",
+    "ae" ~ "æ"
+  ) |> 
+    fct_relevel("i")
+)
+
+iy_ae_mean |> 
+  select(
+    plot_vowel, F1:F2
+  ) |> 
+  gt() |> 
+  fmt_number(use_seps = F, decimals = 0, pattern = "{x}") |> 
+  cols_label(
+    plot_vowel = "vowel"
+  ) |> 
+  tab_options(
+    table.font.size = "100%"
+  ) |> 
+  opt_horizontal_padding(scale = 3)
+```
+
+## Many Measurements? {auto-animate="true"}
+
+```{r}
+iy_ae_mean <- phl_means |> 
+  filter(plt_vclass %in% c("iy", "ae")) |> 
+  mutate(plot_vowel = case_match(
+    plt_vclass,
+    "iy" ~ "i",
+    "ae" ~ "æ"
+  ) |> 
+    fct_relevel("i")
+)
+
+iy_ae_mean |> 
+  select(
+    plot_vowel, F1:F2
+  ) |> 
+  gt() |> 
+  fmt_number(use_seps = F, decimals = 0, pattern = "{x}±?") |> 
+  cols_label(
+    plot_vowel = "vowel"
+  ) |> 
+  tab_options(
+    table.font.size = "100%"
+  ) |> 
+  opt_horizontal_padding(scale = 3)
+```
+
+## One Speaker
+
+One speaker's data from Philadelphia
+
+```{r}
+phl_speaker |> 
+  filter(plt_vclass %in% c("iy", "ae")) |> 
+  mutate(plot_vowel = case_match(
+    plt_vclass,
+    "iy" ~ "i",
+    "ae" ~ "æ"
+  ) |> 
+    fct_relevel("i")
+  )->
+  iy_ae_points
+```
+
+```{r}
+#| crop: true
+#| fig-align: center
+phl_speaker |> 
+  ggplot(aes(F2, F1))+
+    stat_hdr(probs = 0.95, 
+             alpha = 1,
+             fill = "grey80")+
+    geom_label(data = iy_ae_mean, 
+               aes(label = plot_vowel,
+                   color = plot_vowel),
+               size = 8)+
+    geom_textabline(label = "F1 = F2",
+                    color = "grey60")+
+    scale_color_bright(guide = "none") +
+    scale_x_continuous(trans = rev_log)+
+    scale_y_continuous(trans = rev_log)+
+    coord_fixed()
+```
+
+## One Speaker
+
+One speaker's data from Philadelphia
+
+```{r}
+#| crop: true
+#| fig-align: center
+phl_speaker |> 
+  ggplot(aes(F2, F1))+
+    stat_hdr(probs = 0.95, 
+             alpha = 1,
+             fill = "grey80")+
+    geom_label(data = iy_ae_mean, 
+               aes(label = plot_vowel,
+                   color = plot_vowel),
+               size = 8)+
+    stat_ellipse(
+      data = iy_ae_points,
+      aes(
+        color = plot_vowel
+      ),
+      level = c(0.25),
+      linetype = 2,
+      geom = "textpath",
+      label = "?"
+    )+
+    stat_ellipse(
+      data = iy_ae_points,
+      aes(
+        color = plot_vowel
+      ),
+      level = c(0.5),
+      linetype = 2,
+      geom = "textpath",
+      label = "?"
+    )+  
+    stat_ellipse(
+      data = iy_ae_points,
+      aes(
+        color = plot_vowel
+      ),
+      level = c(0.75),
+      linetype = 2,
+      geom = "textpath",
+      label = "?"
+    )+    
+    geom_textabline(label = "F1 = F2",
+                    color = "grey60")+
+    scale_color_bright(guide = "none") +
+    scale_x_continuous(trans = rev_log)+
+    scale_y_continuous(trans = rev_log)+
+    coord_fixed()
+```
+
+## One Speaker
+
+```{r}
+#| crop: true
+#| fig-align: center
+phl_speaker |> 
+  ggplot(aes(F2, F1))+
+    stat_hdr(probs = 0.95, 
+             alpha = 1,
+             fill = "grey80")+
+    geom_point(
+      data = iy_ae_points,
+      aes(color = plot_vowel)
+    ) +
+    geom_textabline(label = "F1 = F2",
+                    color = "grey60")+
+    scale_x_continuous(trans = rev_log)+
+    scale_y_continuous(trans = rev_log)+
+    scale_color_bright()+
+    labs(color = NULL)+
+    coord_fixed()
+```
+
+## One Speaker's Data {auto-animate="true"}
+
+Where will \[ɔ\], as in "thought" go?
+
+::: columns
+::: {.column width="50%"}
+![](assets/IPA_canonical.svg){fig-align="center"}
+:::
+
+::: {.column width="50%"}
+```{r}
+#| crop: true
+vowel_ipa <- svgparser::read_svg(here::here("assets", "IPA_canonical.svg"))
+
+phl_speaker |> 
+ ggplot(aes(-log(F2), -log(F1)))+
+    stat_hdr(
+      probs = 0.95,
+      alpha = 1,
+      fill = "grey80"
+    )+
+    coord_fixed() +
+    labs(x = "F2", y = "F1")+
+    theme(
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank()
+    )
+```
+:::
+:::
+
+## One Speaker's Data {auto-animate="true"}
+
+Where will \[ɔ\], as in "thought" go?
+
+::: columns
+::: {.column width="50%"}
+![](assets/IPA_canonical.svg){fig-align="center"}
+:::
+
+::: {.column width="50%"}
+```{r}
+#| crop: true
+vowel_ipa <- svgparser::read_svg(here::here("assets", "IPA_canonical.svg"))
+
+phl_speaker |> 
+ ggplot(aes(-log(F2), -log(F1)))+
+    stat_hdr(
+      probs = 0.95,
+      alpha = 1,
+      fill = "grey80"
+    )+
+    annotation_custom(
+      vowel_ipa,
+      xmax = -7.2,
+      ymin = -6.9
+      )+
+    coord_fixed() +
+    labs(x = "F2", y = "F1")+
+    theme(
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank()
+    )
+```
+:::
+:::
+
+## One Speaker's Data {auto-animate="true"}
+
+Where will \[ɔ\], as in "thought" go?
+
+::: columns
+::: {.column width="50%"}
+![](assets/IPA_canonical.svg){fig-align="center"}
+:::
+
+::: {.column width="50%"}
+```{r}
+#| crop: true
+phl_speaker |> 
+  filter(plt_vclass == "oh") ->
+  oh_points
+
+phl_speaker |> 
+ ggplot(aes(-log(F2), -log(F1)))+
+    stat_hdr(
+      probs = 0.95,
+      alpha = 1,
+      fill = "grey80"
+    )+
+    annotation_custom(
+      vowel_ipa,
+      xmax = -7.2,
+      ymin = -6.9
+      )+
+    geom_point(
+      data = oh_points,
+      color = "#228833"
+    ) +
+    coord_fixed() +
+    labs(x = "F2", y = "F1") +
+    theme(
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank()
+    )
+```
+:::
+:::
+
+## Over time {.smaller}
+
+Simplifying complex data to one point per person.
+
+```{r}
+
+
+phl_means |> 
+  filter(plt_vclass == "oh") ->
+  oh_mean
+```
+
+```{r}
+#| crop: true
+phl_speaker |> 
+  ggplot(aes(F2, F1))+
+    stat_hdr(probs = 0.95,
+             fill = "grey80",
+             alpha = 1)+
+    geom_point(
+      data = oh_points,
+      color = "#228833"
+    )+
+    geom_textabline(label = "F1 = F2",
+                    color = "grey60")+  
+    scale_x_continuous(trans = rev_log)+
+    scale_y_continuous(trans = rev_log)+
+    labs(title = '"ɔ"')+
+    coord_fixed()->
+  oh_p_plot
+
+phl_speaker |> 
+  ggplot(aes(F2, F1))+
+    stat_hdr(probs = 0.95,
+             fill = "grey80",
+             alpha = 1)+
+    stat_hdr(
+      data = oh_points,
+      probs = 0.8,
+      alpha = 0.3,
+      fill = "#228833",
+      color = "#228833"
+    )+
+    geom_textabline(label = "F1 = F2",
+                    color = "grey60")+
+    geom_label(
+      data = oh_mean,
+      aes(label = ipa_class),
+      size = 8
+    )+
+    scale_x_continuous(trans = rev_log)+
+    scale_y_continuous(trans = rev_log)+
+    labs(title = '"ɔ" average location')+
+    coord_fixed()->
+  oh_m_plot
+
+oh_p_plot + oh_m_plot
+```
+
+## Over Time
+
+```{r}
+pnc <- arrow::read_csv_arrow(here::here("data", "pnc_points.csv"))
+```
+
+```{r}
+pnc |> 
+  filter(!not_phl) |> 
+  select(idstring, sex, dob, plt_vclass, ipa_class, F1:F3) |> 
+  mutate(id = row_number()) |> 
+  pivot_longer(
+    F1:F3,
+    names_to = "formant",
+    values_to = "hz"
+  ) |> 
+  drop_na(hz) |> 
+  mutate(
+    .by = idstring,
+    log_c = log(hz) - mean(log(hz))
+  ) |> 
+  mutate(
+    G = mean(log(hz)),
+    anae_norm = exp(log_c + G)
+  ) |> 
+  select(-hz, -log_c, -G) |> 
+  pivot_wider(
+    names_from = formant,
+    values_from = anae_norm
+  ) |> 
+  summarise(
+    .by = c(idstring, sex, dob, plt_vclass, ipa_class),
+    across(F1:F2, .fns = \(x)exp(mean(log(x))))
+  )->
+  phl_all_means
+```
+
+```{r}
+phl_all_means |> 
+  filter(plt_vclass == "oh") ->
+  oh_means
+```
+
+```{r}
+oh_means |> 
+  select(idstring, dob,  F1:F2) |> 
+  pivot_longer(
+    F1:F2,
+    names_to = "formant",
+    values_to = "frequency"
+  ) |> 
+  mutate(formant = formant |> fct_relevel("F2")) ->
+  oh_mean_long
+
+oh_mean_long |> 
+  ggplot(aes(dob, frequency, color = formant))+
+    geom_point()+
+    scale_color_bright()+
+    scale_y_log10()+
+    labs(x = "year of birth",
+         y = "frequency (Hz)",
+         title = "everyone's average [ɔ] formants"
+         )
+```
+
+## Over Time
+
+```{r}
+brm(
+  bf(mvbind(F1, F2) ~ s(dob)) + set_rescor(TRUE),
+  data = oh_means,
+  backend = "cmdstanr",
+  file = here::here("data", "oh_mod"),
+  cores = 4
+) ->
+  oh_mod
+```
+
+```{r}
+oh_mod |> 
+  predictions(
+    newdata = datagrid(dob = 1890:1990)
+  ) |> 
+  posterior_draws() |> 
+  mutate(
+    group = group |> fct_relevel("F2")
+  ) ->
+  oh_post
+```
+
+```{r}
+#| fig-align: center
+oh_post |> 
+  ggplot(aes(dob, draw))+
+    stat_lineribbon(
+      .width = ppoints(50),
+      aes(fill = group, color = group,
+          fill_ramp = after_stat(.width))
+    )+
+    scale_fill_ramp_continuous(
+      range = c(1, 0.25), 
+      from = "#ffffff00",
+      guide = "none")+
+    scale_fill_bright()+
+    scale_color_bright()+
+    scale_y_log10(limits = range(oh_mean_long$frequency))+
+    labs(
+      x = "Year of Birth",
+      y = "frequency (Hz)",
+      color = "formant",
+      fill = "formant",
+      title = "average over averages"
+    )
+```
+
+## Over Time
+
+```{r}
+oh_post  |> 
+  reframe(
+    .by = c(group, dob),
+    mean_hdci(draw)
+  ) |> 
+  select(group:y) |> 
+  pivot_wider(
+    names_from = group, 
+    values_from = y
+  )->
+  oh_pred
+```
+
+```{r}
+phl_all_means |> 
+  mutate(F1 = log(F1), F2 = log(F2)) |> 
+  reframe(
+    density_polygons(F1, F2, probs = 0.95)
+  ) |> 
+  mutate(F1 = exp(F1),
+         F2 = exp(F2)) |> 
+  mutate(dob = NULL) -> 
+  mean_poly
+```
+
+```{r}
+library(gganimate)
+```
+
+```{r}
+dob_grid <- tibble(max_dob = 1891:1990)
+```
+
+```{r}
+dob_grid |> 
+  left_join(oh_pred, by = join_by(max_dob >= dob))->
+  oh_pred_paths
+```
+
+```{r}
+ggplot()+
+  geom_polygon(
+    data = mean_poly,
+    aes(F2, F1),
+    fill = "grey80"
+  )+
+  geom_path(
+    data = oh_pred_paths,
+    aes(F2, F1)
+  )+
+  geom_label(
+    data = oh_pred |> mutate(max_dob = dob),
+    aes(F2, F1),
+    label = "ɔ?"
+  )+
+    scale_y_continuous(trans = rev_log)+
+    scale_x_continuous(trans = rev_log)+
+    coord_fixed()+
+    transition_time(max_dob)+
+    labs(
+      title = "dob: {frame_time}"
+    )
+```
+
+## Over Time
+
+```{r}
+#| crop: true
+#| fig-align: center
+phl_all_means |> 
+  ggplot(aes(F2, F1))+
+  stat_hdr(
+    probs = 0.95,
+    fill = "grey80",
+    alpha = 1
+  )+
+  geom_path(
+    data = oh_pred,
+    arrow = arrow(type = "closed",
+                  length = unit(0.1, "inches"))
+  )+
+  geom_textabline(label = "F1 = F2",
+                  color = "grey60")+
+  scale_x_continuous(trans = rev_log)+
+  scale_y_continuous(trans = rev_log)+
+  coord_fixed()
+    
+```
+
+## Many Places?
+
+\[æ\] across North America (1 point = 1 speaker)
+
+```{r}
+anae <- read_rds(here::here("data", "anaeUNNORM.rds"))
+```
+
+```{r}
+anae |> 
+  mutate(id = row_number()) |> 
+  pivot_longer(
+    F1:F2,
+    names_to = "formant",
+    values_to = "hz"
+  ) |> 
+  mutate(
+    .by = TS,
+    logmean = log(hz)-mean(log(hz))
+  ) |> 
+  mutate(
+    G = mean(log(hz)),
+    anae_norm = exp(logmean + G)
+  ) |> 
+  select(id, TS:Manner, Word, formant, anae_norm) |> 
+  pivot_wider(
+    names_from = formant,
+    values_from = anae_norm
+  ) ->
+  anae_norm
+```
+
+```{r}
+anae_norm |> 
+  filter(
+    !FolSeg %in% c("M", "N", "NG", "L")
+  ) |> 
+  summarise(
+    .by = c(TS, Age, Sex, City2, State, Dialect, VClass),
+    F1 = exp(mean(log(F1))),
+    F2 = exp(mean(log(F2)))
+  ) ->
+  anae_means
+```
+
+```{r}
+#| crop: true
+#| fig-align: center
+ae_anae <- anae_means |> 
+  filter(VClass == "ae") |> 
+  mutate(Dialect = case_match(
+    Dialect,
+    "IN" ~ "Inland North", 
+    "W" ~ "West"
+  ))
+
+anae_means |> 
+  ggplot(aes(F2, F1))+
+    stat_hdr(probs = 0.95,
+            alpha = 1,
+            fill = "grey80")+
+    geom_point(
+     data = ae_anae
+    )+
+    geom_rect(
+      aes(xmin = 1500,
+      xmax = 2400,
+      ymin = 500,
+      ymax = 1000),
+      fill = NA,
+      color = "grey30",
+      linetype = "dashed"
+    )+
+    geom_textabline(label = "F1 = F2",
+                    color = "grey60")+
+    scale_x_continuous(trans = rev_log)+
+    scale_y_continuous(trans = rev_log)+
+    coord_fixed(xlim = c(2700, 750),
+                ylim = c(1000, 350))+
+    labs(caption = "data from the Atlas of North American English")
+```
+
+## Many Places?
+
+```{r}
+#| crop: true
+#| fig-align: center
+anae_means |> 
+  ggplot(aes(F2, F1))+
+  stat_hdr(probs = 0.95,
+           alpha = 1,
+           fill = "grey80")+
+  stat_hdr(
+    data = ae_anae |> filter(Dialect %in% c("Inland North", 
+                                            "West")),
+    aes(fill = Dialect),
+    probs = 0.9,
+    alpha = 0.5
+  ) * (blend("lighten") + blend("multiply", alpha = 0.5))+
+  geom_point(
+    data = ae_anae |>
+      filter(Dialect %in%  c("Inland North", 
+                             "West")),
+    aes(color = Dialect, partition = Dialect)
+  )* (blend("lighten") + blend("multiply", alpha = 0.5))+
+  geom_rect(
+    aes(xmin = 1500,
+        xmax = 2400,
+        ymin = 500,
+        ymax = 1000),
+    fill = NA,
+    color = "grey30",
+    linetype = "dashed"
+  ) +  
+  geom_textabline(label = "F1 = F2",
+                  color = "grey60")+
+  scale_x_continuous(trans = rev_log)+
+  scale_y_continuous(trans = rev_log)+
+  scale_color_bright()+
+  scale_fill_bright()+
+  coord_fixed(xlim = c(2400, 1500),
+              ylim = c(1000, 500))
+
+```
+
+## Many Places
+
+```{r}
+library(sf)
+anae_geo <- read_csv(here::here("data", "anae_geocoded.csv"))
+```
+
+```{r}
+#| eval: false
+states <- tigris::states(cb = TRUE)
+write_rds(states, here::here("data", "states.rds"))
+```
+
+```{r}
+states <- read_rds(here::here("data", "states.rds"))
+```
+
+```{r}
+ae_anae |> 
+  left_join(anae_geo) |> 
+  drop_na(lat) |> 
+  sfheaders::sf_point(
+    x = "long",
+    y = "lat",
+    keep = T
+  )->
+  ae_sf
+
+st_crs(ae_sf) <- 4326
+
+ae_sf |> 
+  st_transform(5070)->
+  ae_sf
+```
+
+```{r}
+states |> 
+  filter(
+    !STUSPS %in% c("AS", "GU", "HI", "MP", "PR", "AK", "VI")
+  ) |> 
+  st_transform(5070)->
+  states_conus
+```
+
+```{r}
+ae_sf |> 
+  st_filter(
+    states_conus,
+    .predicate = st_covered_by
+  )->
+  ae_us_sf
+```
+
+```{r}
+states_conus |> 
+  ggplot()+
+    geom_sf()+
+    geom_sf(
+      data = ae_us_sf,
+      aes(color = F1),
+      size = 3
+    )+
+    scale_color_hawaii(trans = "reverse")+
+    theme_void()
+```
+
+## Solution?
+
+```{r}
+anae_means |> 
+  mutate(lF1 = -log(F1),
+         lF2 = -log(F2)) |> 
+  reframe(
+    density_polygons(lF2, lF1, probs = 0.95, as_sf = T)
+  ) |> 
+  st_sf()->
+  vowel_dens_sf
+```
+
+```{r}
+vowel_dens_sf |> 
+  st_make_grid(square = F, cellsize = 0.05)->
+  hex_grid
+```
+
+```{r}
+hex_grid |> 
+  st_sf() |> 
+  st_filter(
+    vowel_dens_sf,
+    .predicate = st_covered_by
+  ) |> 
+  mutate(id = row_number())->
+  vowel_hex
+
+vowel_hex |> 
+  st_centroid()->
+  vowel_hex_center
+```
+
+```{r}
+vowel_hex |> 
+  ggplot()+
+    geom_sf(
+      aes(fill = id)
+    ) +
+    geom_sf_text(
+      data = vowel_hex_center, 
+      aes(label = id),
+      size = 2
+    )+
+    scale_fill_hawaii(guide = "none")+
+    labs(
+      x = NULL,
+      y = NULL
+    ) +
+    theme(
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank()
+    )
+```
+
+## Solution?
+
+```{r}
+#| eval: false
+khroma::color("hawaii")(340)[316]
+khroma::color("hawaii")(340)[258]
+khroma::color("hawaii")(340)[143]
+```
+
+::: {.fragment style="margin-bottom:5%"}
+"I just had a \[θ[⬢]{style="color:#80EDEA"}~316~t\]!"
+:::
+
+::: {.fragment style="text-align:right; margin-bottom:5%"}
+"Cool! What's your \[θ[⬢]{style="color:#69D491"}~258~t\]?"
+:::
+
+::: {.fragment style="margin-bottom:5%"}
+"What if we \[b[⬢]{style="color:#80EDEA"}~316~t\] a \[kʰ[⬢]{style="color:#9B7920"}~143~t\]?"
+:::
+
+::: {.fragment style="text-align:right; margin-bottom:10%"}
+"Oh! I'd love a \[kʰ[⬢]{style="color:#923251"}~49~t\]!"
+:::
+
+::: fragment
+Anything challenging about this approach?
+:::
+
+## "Lexical Sets"
+
+If I hear someone say "thought",
+
+::: columns
+::: {.column width="50%"}
+I can guess they'll pronounce the vowel very similarly in
+
+::: incremental
+-   off
+
+-   dog
+
+-   long
+
+-   caught
+
+-   daughter
+
+-   ...
+:::
+:::
+
+::: {.column width="50%"}
+I can't guess much about
+
+::: incremental
+-   cat
+
+-   chair
+
+-   steep
+
+-   stung
+
+-   rose
+
+-   ...
+:::
+:::
+:::
+
+## Lexical Sets
+
+When this happened, all those words in {thought, off, dog, long, caught, daughter, ...} went along for the ride.
+
+```{r}
+#| crop: true
+#| fig-align: center
+phl_all_means |> 
+  ggplot(aes(F2, F1))+
+  stat_hdr(
+    probs = 0.95,
+    fill = "grey80",
+    alpha = 1
+  )+
+  geom_path(
+    data = oh_pred,
+    arrow = arrow(type = "closed",
+                  length = unit(0.1, "inches"))
+  )+
+  geom_textabline(label = "F1 = F2",
+                  color = "grey60")+
+  scale_x_continuous(trans = rev_log)+
+  scale_y_continuous(trans = rev_log)+
+  coord_fixed()
+```
+
+## Lexical Sets
+
+::: incremental
+-   Maybe \<ɔ\> is just the symbol we use to denote "all those words that group together".
+
+-   But \<ɔ\> is also a symbol we use to denote a **sound**.
+
+-   $thought \in \mathbb{O}$ **isn't a sound**.
+:::
+
+## Lexical Sets
+
+For English, there are some highly conventionalized lexical class labels, called "Wells' Lexical Sets", after @wells1982
+
+::: columns
+::: {.column width="50%"}
+```{r}
+tibble(
+  `Lexical Set` = c("Fleece", "Kit", "Face", "Dress", "Trap"),
+  `Sample Words` = list(c("see", "bees"), 
+                        c("sit", "kit"), 
+                        c("lane", "say"),
+                        c("bend", "less"),
+                        c("cat", "snap")
+                        ),
+  `Commonly Used IPA` = c("i", "ɪ", "e", "ɛ", "æ")
+) |> 
+  gt() |> 
+    tab_style(
+      style = list(css(font.variant = "small-caps")),
+      locations = cells_body(columns = `Lexical Set`)
+    ) |>  
+  tab_options(
+    table.font.size = "75%"
+  )
+```
+:::
+
+::: {.column width="50%"}
+```{r}
+tibble(
+  `Lexical Set` = c("Goose", "Foot", "Goat", "Strut", "Thought", "Lot"),
+  `Sample Words` = list(c("soon", "bruise"), 
+                        c("push", "book"), 
+                        c("own", "boat"),
+                        c("plush", "buck"),
+                        c("caught", "lost"),
+                        c("sock", "mop")
+                        ),
+  `Commonly Used IPA` = c("u", "ʊ", "o", "ʌ", "ɔ", "ɑ")
+) |> 
+  gt() |> 
+    tab_style(
+      style = list(css(font.variant = "small-caps")),
+      locations = cells_body(columns = `Lexical Set`)
+    ) |> 
+  tab_options(
+    table.font.size = "75%"
+  )
+```
+:::
+:::
+
+## Lexical Sets
+
+People use lexical sets kind of like this:
+
+> Philadelphia has a relatively high and back [[**Thought**]{.smallcaps} **vowel**[describing the set]{.annotation .fragment}]{.highlight} ranging from [\[ʊ͡ə\] to \[ɔː\][describing the sound]{.annotation .fragment}]{.highlight}.
+
+## Labov/Trager notation {.smaller}
+
+North American English socio / dialectology has its own (quirky) notation system
+
+::: columns
+::: {.fragment .column width="25%"}
+| front                        | back                         |
+|------------------------------|------------------------------|
+| i<br>([*Kit*]{.smallcaps})   | u<br>([*Foot*]{.smallcaps})  |
+| e<br>([*Dress*]{.smallcaps}) | ʌ<br>([*Strut*]{.smallcaps}) |
+| æ<br>([*Trap*]{.smallcaps})  | o<br>([*Lot*]{.smallcaps})   |
+:::
+
+::: {.fragment .column width="25%"}
+| front                          | back                           |
+|--------------------------------|--------------------------------|
+| iy<br>([*Fleece*]{.smallcaps}) |                                |
+| ey<br>([*Face*]{.smallcaps})   | oy<br>([*Choice*]{.smallcaps}) |
+|                                | ay<br>([*Price*]{.smallcaps})  |
+:::
+
+::: {.fragment .column width="25%"}
+| front                         | back                          |
+|-------------------------------|-------------------------------|
+|                               | uw<br>([*Goose*]{.smallcaps}) |
+|                               | ow<br>([*Goat*]{.smallcaps})  |
+| aw<br>([*Mouth*]{.smallcaps}) |                               |
+:::
+
+::: {.fragment .column width="25%"}
+| front | back                            |
+|-------|---------------------------------|
+|       | [x<br>x]{style="opacity:0.0"}   |
+|       | oh<br>([*Thought*]{.smallcaps}) |
+|       | ah<br>([*Palm*]{.smallcaps})    |
+:::
+:::
+
+## North American Vowels
+
+```{r}
+tibble(
+  VClass = c("i", "e", "ae", "u", "uh", "o", "iy", "ey", "uw", "ow", "Tuw", "oh"),
+  lex = c("Kit", "Dress", "Trap", "Foot", "Strut", "Lot", "Fleece", "Face","Goose", "Goat", "Tooth", "Thought")
+)->lex_class 
+```
+
+```{r}
+#| crop: true
+#| fig-align: center
+anae_means |> 
+  filter(
+    VClass %in% c("i", "e", "ae", "u", "uh", "o", "iy", "ey", "uw", "ow", "Tuw", "oh"),
+    
+  ) |> 
+  left_join(lex_class) |> 
+  ggplot(aes(F2, F1, color = VClass, fill = VClass))+
+    stat_hdr(probs = 0.7, color = NA)+
+    stat_hdr(probs = 0.7, geom = "textcontour", 
+             aes(label = lex), 
+             alpha = 1,
+             hjust = 1)+
+    scale_x_continuous(trans = rev_log, breaks = c(1000, 2000))+
+    scale_y_continuous(trans = rev_log)+
+    guides(
+      color = "none",
+      fill = "none",
+      alpha = "none"
+    ) +
+    coord_fixed()+
+    labs(title = "North American Vowels", caption = "source: The Atlas of North American English")
+```
+
+## Lexington & Louisville
+
+```{r}
+#| crop: true
+#| fig-align: center
+#| out-width: 100%
+anae_means |> 
+  filter(City2 %in% c("Lexington", "Louisville") , State %in% c("KY", "OH")) |> 
+  filter(
+    VClass %in% c("i", "e", "ae", "u", "uh", "o", "iy", 
+                  "ey", "uw", "ow", "Tuw", "oh"),
+  ) |> 
+  left_join(lex_class) |> 
+  mutate(id = str_glue("{City2}, {State} (id:{TS})")) |> 
+  ggplot(aes(F2, F1, color = VClass))+
+    stat_hdr(
+      data = anae_means |> mutate(TS = NULL),
+      probs = 0.9,
+      color = "grey",
+      fill = "grey"
+    )+
+    geom_label(aes(label = lex), fill = "#ffffff99",
+               size = 2)+
+    scale_x_continuous(trans = rev_log, breaks = c(1000, 2000))+
+    scale_y_continuous(trans = rev_log)+
+    guides(
+      color = "none",
+      fill = "none",
+      alpha = "none"
+    ) +
+    coord_fixed()+
+    facet_wrap(~id)
+```
+
+## Defining Lexical Sets {.smaller}
+
+Don't take it for granted! @ANAE uses alot of *historical* information.
+
+:::{.fragment}
+> /oh/, "long open-o". This class has a highly skewed distribution that reflects the complex and irregular history of its composition. It is the result of monophthongization of **au** in *law, fault, talk, hawk, caught*, in turn derived from
+
+:::
+
+:::{.fragment}
+> [O.E. **aw** (*thaw, straw, claw*); O.E. **ag** (*maw, saw, draw*); O.E. **ah**, broken to **eah** (*fought, taught*); O.F. **a + u** in the next syllable (*brawn, pawn*), M.E. **av** (*hawk, laundry*); O.F. **au** (*applaud, fraud, because*); O.F. **am**, **an** (**lawn, spawn**).[Historical sources of [Thought]{.smallcaps}]{.annotation}]{.highlight} 
+
+:::
+
+
+:::{.fragment}
+>In addition, some long open-o words are descended from O.E. **oht** (*thought, daughter, brought*). Its current distribution is largely limited to final position and words terminating in /t, d, k, n, l, z/. The lengthening of /o/ before nasals and voiceless fricatives enlarged the /oh/ class considerably, but did not materially affect the number of environments where contrast with /o/ is to be found.
+
+:::
+
+## Defining Lexical Sets
+
+When working on English:
+
+::: incremental
+
+- Start from either Wells or ANAE groups
+
+- Define or refine your own.
+
+  - [Price]{.smallcaps} → [Prize]{.smallcaps} / [Price]{.smallcaps}
+  
+  - [Goat]{.smallcaps} → [Goat]{.smallcaps} / [Bowl]{.smallcaps}
+
+:::
+
+## Defining Lexical Sets
+
+When working on other languages
+
+::: incremental
+
+- Start from prior literature, if it exists
+
+- Be explicit about your **set** labels vs your **sound** labels.
+
+:::
+
+
+## What of IPA transcription?
+
+It's a useful part of a larger tool kit to communicate the same information. Each of these hits different.
+
+
+::: columns
+::: {.column width="50%"}
+
+:::{.fragment}
+> [Price]{.smallcaps} class [ʌ͡i]
+
+:::
+
+:::{.fragment}
+```{r}
+html_tag_audio("assets/kite.wav")
+```
+
+:::
+
+:::{.fragment}
+![](assets/kite_formant.png){fig-align="center"}
+
+:::
+
+:::
+
+
+
+
+
+::: {.column width="50%"}
+
+
+
+
+:::{.fragment}
+
+```{r}
+joe_v <- read_tsv(here::here("data", "joe_speaker.txt"))
+kite <- read_csv(here::here("data", "kite.csv"))
+kite |> 
+  mutate(lf1 = log(f1),
+         lf2 = log(f2)
+  )->
+  kite
+```
+
+```{r}
+library(mgcv)
+library(marginaleffects)
+```
+
+```{r}
+kite_mod <- gam(
+  list(
+    lf1 ~ s(time),
+    lf2 ~ s(time) 
+  ),
+  data = kite,
+  family = mvn(d=2)
+)
+```
+
+```{r}
+kite_mod |> 
+  predictions() |> 
+  as.tibble() |> 
+  select(rowid, group, estimate) |> 
+  mutate(
+    formant = c("F1", "F2")[as.numeric(group)]
+  ) |> 
+  select(-group) |> 
+  pivot_wider(
+    names_from = formant,
+    values_from = estimate
+  ) ->
+  preds
+
+
+
+kite_mod |> 
+  slopes() |> 
+  as.tibble() |> 
+  select(rowid, group, estimate) |> 
+  mutate(
+    formant = c("F1", "F2")[as.numeric(group)]
+  ) |> 
+  select(-group) |> 
+  pivot_wider(
+    names_from = formant,
+    values_from = estimate
+  ) |> 
+  mutate(
+    dist = sqrt((F1^2) + (F2^2))
+  ) |> 
+  select(-F1, -F2) ->
+  distances
+```
+
+
+```{r}
+#| crop: true
+#| fig-align: center
+#| out-width: 50%
+preds |> 
+  left_join(distances) |> 
+  ggplot(aes(exp(F2), exp(F1)))+
+    stat_hdr(
+      data = joe_v,
+      aes(x = F2, y = F1),
+      probs = 0.9,
+      fill = "grey80",
+      alpha = 1
+    )+
+    geom_path(aes(size = 1/dist, color = rowid), lineend = "round")+
+    scale_x_continuous(trans = rev_log)+
+    scale_y_continuous(trans = rev_log)+
+    guides(size = "none",
+           color = "none")+
+    labs(x = "F2", y = "F1")+
+    coord_fixed()
+```
+
+
+:::
+
+:::
+
+:::
+
+## References

@@ -1,0 +1,20 @@
+.highlight {
+  position: relative;
+  display: inline-block;
+  margin-top: 1em;
+  padding-left: 0.5em;
+  padding-right: 0.5em;
+  background-color: #AFE7FFFF;
+  border-radius: 0.25em 0.5em;
+}
+
+.highlight .annotation {
+  position: absolute;
+  width:100%;
+  left: 0;
+  bottom: 100%;
+  font-size: 0.75em;
+  text-align: center;
+  white-space: nowrap;
+  font-style: italic;
+}
